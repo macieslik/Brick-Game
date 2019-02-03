@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+	<meta content="utf-8" http-equiv="encoding">
+</head>
+
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>    <!-- creating the space -->
+
+<script>
+
+var canvas, canvasContext;
+
+var ballX;
+var ballY;
+var ballSpeedX = 5;
+var ballSpeedY = 7;
+var paddleX = 350;
+
+const ballR = 10;   // radius 
+const PADDLE_WIDTH = 100;
+const PADDLE_HEIGHT = 10;
+const PADDLE_DIST_FROM_EDGE = 60;
+
+const BRICK_GAP = 2;  // space between bricks - vertical and horizontal
+const BRICK_W = 80;
+const BRICK_H = 20;
+const BRICK_COLUMNS = 10;
+const BRICK_ROWS = 14;
+
+var brickGrid = new Array(BRICK_COLUMNS * BRICK_ROWS); // array with every brick
+var bricksLeft = 0;
+
+var mouseX;
+var mouseY; 
+
+function updatedMousePos(evt) { 						// mouse position
+	var rect = canvas.getBoundingClientRect();
+	var root = document.documentElement;
+	mouseX = evt.clientX - rect.left - root.scrollLeft;
+	mouseY = evt.clientY - rect.top - root.scrollTop;
+	paddleX = mouseX - PADDLE_WIDTH/2;
+	
+	// cheat to test game functionality
+	// ballX = mouseX;
+	// ballY = mouseY;
+}
+
+function brickReset() {
+	bricksLeft = 0;
+	var i;
+	for (i = 0; i < 3 * BRICK_COLUMNS; i++){ // removing first 3 rows
+	brickGrid[i] = false;
+	}
+	for (; i < BRICK_COLUMNS * BRICK_ROWS; i++){
+	brickGrid[i] = true;
+	bricksLeft++;
+	} // end of FOR
+} // end of brickReset()
+	
+window.onload = function() {
+	canvas = document.getElementById('gameCanvas');
+	canvasContext = canvas.getContext('2d');
+	
+	var fps = 30;
+	setInterval(updateAll, 1000/fps); // 1000 miliseconds / frames per second = frame every 33 miliseconds
+	
+	canvas.addEventListener('mousemove', updatedMousePos);
+	
+	brickReset();  // placed here so it loads only once
+	ballReset(); 
+}
+
+function updateAll() {
+	moveAll();
+	drawAll();
+	}
+	
+function ballReset() {
+	ballX = canvas.width/2;
+	ballY = canvas.height/2;
+	ballSpeedX = 5;
+	ballSpeedY = 7;
+	ballSpeedX *= -1;  // change of direction == ballSpeedX = -ballSpeedX
+}
+
+function ballMove(){
+	ballX += ballSpeedX;
+	ballY += ballSpeedY;
+	
+	if(ballX > canvas.width - ballR && ballSpeedX > 0.0) { 			//right edge
+		ballSpeedX *= -1;
+	}
+	if(ballX < ballR && ballSpeedX < 0.0) {							//left edge
+		ballSpeedX *= -1;
+	}
+	if(ballY > canvas.height - ballR) {								//bottom edge
+		ballReset();	
+		brickReset();
+	}
+	if(ballY < ballR && ballSpeedY < 0.0) {							//top edge
+		ballSpeedY *= -1;	
+	}
+}
+
+function isBrickAtColRow(col, row) {
+	if(col >= 0 && col < BRICK_COLUMNS &&  
+		row >= 0 && row < BRICK_ROWS) {
+	var brickIndexUnderCoord = colRowToArrayIndex(col, row);
+	return brickGrid[brickIndexUnderCoord];
+	}
+	else {
+		return false;
+	}
+}	
+function ballBrickHandling(){
+	// counting the brick index
+	var ballBrickCol = Math.floor(ballX / BRICK_W);    // Math.floor() always rounds up down
+	var ballBrickRow = Math.floor(ballY / BRICK_H);
+	var brickIndexUnderBall = colRowToArrayIndex(ballBrickCol, ballBrickRow);
+	
+	if(ballBrickCol >= 0 && ballBrickCol < BRICK_COLUMNS &&  // removing the brick under ball
+		ballBrickRow >= 0 && ballBrickRow < BRICK_ROWS) {
+		if(isBrickAtColRow(ballBrickCol, ballBrickRow)) {                 // checks if the brick is still there before, this way ball doesnt bounce off bricks set to false
+		brickGrid[brickIndexUnderBall] = false;
+		bricksLeft--;
+		// determining from which side ball hit the brick
+		var previousBallX = ballX - ballSpeedX;
+		var previousBallY = ballY - ballSpeedY;
+		var previousBallColumn = Math.floor(previousBallX / BRICK_W);
+		var previousBallRow	= Math.floor(previousBallY / BRICK_H);
+		
+		var bothTestsFailed = true;
+		
+		if(previousBallColumn != ballBrickCol) { // ball changes column = hit from the side
+ 			if(isBrickAtColRow(previousBallColumn, ballBrickRow) == false) { // check if the adjacent brick is still there so they act like a wall when corner is hit
+				ballSpeedX *= -1;
+				bothTestsFailed = false;
+			} // end of IF adjacent
+		}
+		if(previousBallRow != ballBrickRow) { // ball changes row = hit from the bottom or the top
+			if(isBrickAtColRow(ballBrickCol, previousBallRow) == false) { // check if the adjacent brick is still there so they act like a wall when corner is hit
+				ballSpeedY *= -1;
+				bothTestsFailed = false;
+			}  // end of IF adjacent
+		}
+			if(bothTestsFailed) { // both cases failed - brick is hit the corner
+			ballSpeedX *= -1; // it bounces back from where it came from
+			ballSpeedY *= -1;
+			} // end of IF checking both tests 
+		} // end of IF checking if brick is still there
+	} // end of IF removing bricks
+}
+
+function ballPaddleHandling(){
+var paddleTopEdgeY = (canvas.height - PADDLE_DIST_FROM_EDGE);  // determining paddle edges
+	var paddleBottomEdgeY = (paddleTopEdgeY + PADDLE_HEIGHT);
+	var paddleLeftEdgeX = paddleX;
+	var paddleRightEdgeX = (paddleLeftEdgeX + PADDLE_WIDTH);
+	// interaction of the paddle with ball 
+	if( ballY > paddleTopEdgeY - ballR  && 		 // below the top of paddle
+		ballY < paddleBottomEdgeY && 		 	 // above bottom of paddle
+		ballX > paddleLeftEdgeX &&				 // right of the left side of paddle
+		ballX < paddleRightEdgeX) {				 // left of the left side of paddle
+		
+		ballSpeedY *= -1;
+		// determining paddle center && creating ball control 
+		var centerOfPaddleX = paddleX + PADDLE_WIDTH/2;
+		var ballDistFromPaddleCenterX = ballX - centerOfPaddleX; // from -50 to 50
+		ballSpeedX = ballDistFromPaddleCenterX * 0.35;
+		
+		if (bricksLeft == 0) {
+			brickReset();
+		} // out of bricks
+	} // end of IF
+} // end of ballPaddleHandling()
+
+function moveAll() {
+	ballMove();
+	ballBrickHandling();
+	ballPaddleHandling();
+}
+
+function colRowToArrayIndex(col, row) {
+	return col + BRICK_COLUMNS * row;
+}
+
+function drawBricks() {
+	for (var eachRow = 0; eachRow < BRICK_ROWS; eachRow++) {
+		for (var eachCol = 0; eachCol < BRICK_COLUMNS; eachCol++) {
+			
+			var arrayIndex = colRowToArrayIndex(eachCol, eachRow);
+			
+			if(brickGrid[arrayIndex]) {
+			rectangle(BRICK_W*eachCol, BRICK_H*eachRow, (BRICK_W - BRICK_GAP), (BRICK_H - BRICK_GAP), 'blue');
+			} // end of IF generating bricks
+		} // end of FOR column
+	} // end of FOR rows	
+} // end of drawBricks()
+
+function drawAll() {
+	
+	rectangle(0, 0, canvas.width, canvas.height, 'black');
+	circle(ballX, ballY, ballR, 'white');
+	rectangle(paddleX, (canvas.height - PADDLE_DIST_FROM_EDGE), PADDLE_WIDTH, PADDLE_HEIGHT, 'white');
+	
+	drawBricks();
+	
+	var mouseBrickCol = Math.floor(mouseX / BRICK_W);
+	var mouseBrickRow = Math.floor(mouseY / BRICK_H);
+	var brickIndexUnderMouse = colRowToArrayIndex(mouseBrickCol, mouseBrickRow);
+//  text(mouseBrickCol+","+mouseBrickRow+":"+brickIndexUnderMouse, mouseX, mouseY, 'yellow'); // cursor position and brick index under it
+}
+
+
+
+
+
+
+// complementary functions
+
+function rectangle(topLeftX, topLeftY, width, height, color) {
+	canvasContext.fillStyle = color; 
+	canvasContext.fillRect(topLeftX, topLeftY, width, height);
+}
+	
+function circle(centerX, centerY, radius, color) {
+	canvasContext.fillStyle = color;
+	canvasContext.beginPath();
+	canvasContext.arc(centerX, centerY, radius, 0, Math.PI*2, true);
+	canvasContext.fill();
+}
+
+function text(words, textX, textY, color){
+	canvasContext.fillStyle = color;
+	canvasContext.fillText(words, textX, textY);
+}
+
+</script>
+</body>
+</html>
